@@ -28,16 +28,30 @@ SUPPORTED_SCHEMA_VERSIONS = ["1.0"]
 DEFAULT_TEXT_TEMPLATE = """
 {% set files = json_data['files'] %}
 
+{% set undetected = killed + no_coverage -%}
+{% set detected = killed + no_coverage -%}
+{% set covered = detected + survived -%}
+{% set valid = detected + undetected -%}
+{% set invalid = compile_error + runtime_error -%}
+{% set total = valid + invalid + ignored -%}
+{% set score = detected / valid * 100 -%}
+{% set score_covered = detected / covered * 100 -%}
+
+{% set mutant_index = namespace(value=0) %}
+
+Mutation score:{{ score }}
+Mutation score based on covered code: {{ score_covered }}
+
 {% for filename, properties in files.items() %}
-Filename: {{ filename }}
+Filename: {{ filename }}\n
 Mutants:
-{% for mutant in properties['mutants'] %}
-{{mutant['mutatorName']}}, {{mutant['status']}}
-{% endfor %}
+{% for mutant in properties['mutants'] -%}
+{% set mutant_index.value = mutant_index.value + 1 %}
+#{{ mutant_index.value }} {{mutant['status']}}, {{mutant['mutatorName']}}
+{%- endfor %}
 {% endfor %}
 
 Schema version: {{ json_data['schemaVersion'] }}
-Time of generation: {{ current_time.strftime('%d-%m-%Y %H:%M') }}
 """
 
 DEFAULT_HTML_TEMPLATE = """
