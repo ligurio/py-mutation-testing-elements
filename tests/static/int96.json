@@ -1,0 +1,394 @@
+{
+  "schemaVersion": "1.0",
+  "thresholds": {
+    "high": 80,
+    "low": 60
+  },
+  "files": {
+    "/home/sergeyb/sources/MRG/tarantool/src/lib/bit/int96.h": {
+      "language": "cpp",
+      "mutants": [
+        {
+          "id": "cxx_post_inc_to_post_dec",
+          "location": {
+            "end": {
+              "column": 14,
+              "line": 97
+            },
+            "start": {
+              "column": 2,
+              "line": 97
+            }
+          },
+          "mutatorName": "Replaced x++ with x--",
+          "replacement": "--",
+          "status": "Killed"
+        },
+        {
+          "id": "cxx_eq_to_ne",
+          "location": {
+            "end": {
+              "column": 46,
+              "line": 152
+            },
+            "start": {
+              "column": 9,
+              "line": 152
+            }
+          },
+          "mutatorName": "Replaced == with !=",
+          "replacement": "!=",
+          "status": "Killed"
+        },
+        {
+          "id": "cxx_eq_to_ne",
+          "location": {
+            "end": {
+              "column": 33,
+              "line": 132
+            },
+            "start": {
+              "column": 9,
+              "line": 132
+            }
+          },
+          "mutatorName": "Replaced == with !=",
+          "replacement": "!=",
+          "status": "Killed"
+        }
+      ],
+      "source": "#ifndef TARANTOOL_LIB_BIT_INT96_H_INCLUDED\n#define TARANTOOL_LIB_BIT_INT96_H_INCLUDED\n/*\n * Copyright 2010-2016, Tarantool AUTHORS, please see AUTHORS file.\n *\n * Redistribution and use in source and binary forms, with or\n * without modification, are permitted provided that the following\n * conditions are met:\n *\n * 1. Redistributions of source code must retain the above\n *    copyright notice, this list of conditions and the\n *    following disclaimer.\n *\n * 2. Redistributions in binary form must reproduce the above\n *    copyright notice, this list of conditions and the following\n *    disclaimer in the documentation and/or other materials\n *    provided with the distribution.\n *\n * THIS SOFTWARE IS PROVIDED BY <COPYRIGHT HOLDER> ``AS IS'' AND\n * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED\n * TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR\n * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL\n * <COPYRIGHT HOLDER> OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT,\n * INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL\n * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF\n * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR\n * BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF\n * LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT\n * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF\n * THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF\n * SUCH DAMAGE.\n */\n\n#include <inttypes.h>\n#include <assert.h>\n#include <stdbool.h>\n\n/**\n * 96-bit signed integer.\n * 1)Negative integer is stored as 96-bit two's complement\n * 2)Stores an integer modulo n, where n = 2**96\n * Actually (1) == (2), as the wave-particle duality.\n * Designed for storing integers in range [INT64_MIN, UINT64_MAX],\n * and detecting overflow (out of range [INT64_MIN, UINT64_MAX])\n * after operations (addition, subtraction) on them.\n * The base fact is when two uint64_t or int64_t values\n * are converted to int96, and then added or subtracted, the\n * int96 arithmetics cannot overflow. Actually you need at least\n * billions of adding UINT64_MAX or INT64_MIN to make it overflow.\n * Addition is implemented directly;\n * For subtraction use addition of inverted number.\n */\n\n/**\n * struct 96-bit signed integer\n */\nstruct int96_num {\n\t/* most significant 64 bits */\n\tuint64_t high64;\n\t/* least significant order 32 bits */\n\t/* (high dword - zero bits) */\n\tuint64_t low32;\n};\n\n/**\n * Assign to unsigned 64-bit\n */\nstatic inline void\nint96_set_unsigned(struct int96_num *num, uint64_t val)\n{\n\tconst uint64_t mask = 0xFFFFFFFFu;\n\tnum->high64 = val >> 32;\n\tnum->low32 = val & mask;\n}\n\n/**\n * Assign to signed 64-bit\n */\nstatic inline void\nint96_set_signed(struct int96_num *num, int64_t val)\n{\n\tconst uint64_t mask = 0xFFFFFFFFu;\n\tnum->high64 = (uint64_t)(val >> 32);\n\tnum->low32 = ((uint64_t)val) & mask;\n}\n\n/**\n * Invert number (assign a to -a)\n */\nstatic inline void\nint96_invert(struct int96_num *num)\n{\n\tconst uint64_t mask = 0xFFFFFFFFu;\n\tassert(!(num->low32 & ~mask));\n\tnum->high64 = ~num->high64;\n\tnum->low32 = (~num->low32) & mask;\n\tnum->low32++;\n\tnum->high64 += num->low32 >> 32;\n\tnum->low32 &= mask;\n}\n\n/**\n * Add to number 'to' another number 'what'\n */\nstatic inline void\nint96_add(struct int96_num *to, const struct int96_num *what)\n{\n\tconst uint64_t mask = 0xFFFFFFFFu;\n\tassert(!(to->low32 & ~mask));\n\tassert(!(what->low32 & ~mask));\n\tto->low32 += what->low32;\n\tto->high64 += to->low32 >> 32;\n\tto->high64 += what->high64;\n\tto->low32 &= mask;\n}\n\n/**\n * Get lowers 64 bit of a number (that is C cast to uint64_t)\n */\nstatic inline uint64_t\nint96_get_low64bit(const struct int96_num *num)\n{\n\treturn num->low32 | (num->high64 << 32);\n}\n\n/**\n * Returns true if a number fits [0, UINT64_MAX] range\n */\nstatic inline bool\nint96_is_uint64(const struct int96_num *num)\n{\n\treturn (num->high64 >> 32) == 0;\n}\n\n/**\n * Get number as uint64_t,\n * the number is expected to be valid range (assert)\n */\nstatic inline uint64_t\nint96_extract_uint64(const struct int96_num *num)\n{\n\tassert(int96_is_uint64(num));\n\treturn int96_get_low64bit(num);\n}\n\n/**\n * Returns true if a number fits [INT64_MIN, 0) range\n */\nstatic inline bool\nint96_is_neg_int64(const struct int96_num *num)\n{\n\treturn (num->high64 >> 31) == 0x1FFFFFFFFull;\n}\n\n/**\n * Get number as negative int64_t,\n * the number is expected to be valid range (assert)\n */\nstatic inline int64_t\nint96_extract_neg_int64(const struct int96_num *num)\n{\n\tassert(int96_is_neg_int64(num));\n\treturn (int64_t)int96_get_low64bit(num);\n}\n\n#endif /* #ifndef TARANTOOL_LIB_BIT_INT96_H_INCLUDED */\n"
+    },
+    "/home/sergeyb/sources/MRG/tarantool/test/unit/int96.cc": {
+      "language": "cpp",
+      "mutants": [
+        {
+          "id": "cxx_lt_to_ge",
+          "location": {
+            "end": {
+              "column": 26,
+              "line": 28
+            },
+            "start": {
+              "column": 18,
+              "line": 28
+            }
+          },
+          "mutatorName": "Replaced < with >=",
+          "replacement": ">=",
+          "status": "Survived"
+        },
+        {
+          "id": "cxx_lt_to_ge",
+          "location": {
+            "end": {
+              "column": 23,
+              "line": 29
+            },
+            "start": {
+              "column": 18,
+              "line": 29
+            }
+          },
+          "mutatorName": "Replaced < with >=",
+          "replacement": ">=",
+          "status": "Killed"
+        },
+        {
+          "id": "cxx_lt_to_ge",
+          "location": {
+            "end": {
+              "column": 27,
+              "line": 33
+            },
+            "start": {
+              "column": 18,
+              "line": 33
+            }
+          },
+          "mutatorName": "Replaced < with >=",
+          "replacement": ">=",
+          "status": "Killed"
+        },
+        {
+          "id": "cxx_lt_to_ge",
+          "location": {
+            "end": {
+              "column": 26,
+              "line": 50
+            },
+            "start": {
+              "column": 18,
+              "line": 50
+            }
+          },
+          "mutatorName": "Replaced < with >=",
+          "replacement": ">=",
+          "status": "Survived"
+        },
+        {
+          "id": "cxx_lt_to_ge",
+          "location": {
+            "end": {
+              "column": 23,
+              "line": 51
+            },
+            "start": {
+              "column": 18,
+              "line": 51
+            }
+          },
+          "mutatorName": "Replaced < with >=",
+          "replacement": ">=",
+          "status": "Killed"
+        },
+        {
+          "id": "cxx_lt_to_ge",
+          "location": {
+            "end": {
+              "column": 27,
+              "line": 55
+            },
+            "start": {
+              "column": 18,
+              "line": 55
+            }
+          },
+          "mutatorName": "Replaced < with >=",
+          "replacement": ">=",
+          "status": "Killed"
+        },
+        {
+          "id": "cxx_lt_to_le",
+          "location": {
+            "end": {
+              "column": 26,
+              "line": 28
+            },
+            "start": {
+              "column": 18,
+              "line": 28
+            }
+          },
+          "mutatorName": "Replaced < with <=",
+          "replacement": "<=",
+          "status": "Survived"
+        },
+        {
+          "id": "cxx_lt_to_le",
+          "location": {
+            "end": {
+              "column": 23,
+              "line": 29
+            },
+            "start": {
+              "column": 18,
+              "line": 29
+            }
+          },
+          "mutatorName": "Replaced < with <=",
+          "replacement": "<=",
+          "status": "Killed"
+        },
+        {
+          "id": "cxx_lt_to_le",
+          "location": {
+            "end": {
+              "column": 27,
+              "line": 33
+            },
+            "start": {
+              "column": 18,
+              "line": 33
+            }
+          },
+          "mutatorName": "Replaced < with <=",
+          "replacement": "<=",
+          "status": "Killed"
+        },
+        {
+          "id": "cxx_lt_to_le",
+          "location": {
+            "end": {
+              "column": 26,
+              "line": 50
+            },
+            "start": {
+              "column": 18,
+              "line": 50
+            }
+          },
+          "mutatorName": "Replaced < with <=",
+          "replacement": "<=",
+          "status": "Survived"
+        },
+        {
+          "id": "cxx_lt_to_le",
+          "location": {
+            "end": {
+              "column": 23,
+              "line": 51
+            },
+            "start": {
+              "column": 18,
+              "line": 51
+            }
+          },
+          "mutatorName": "Replaced < with <=",
+          "replacement": "<=",
+          "status": "Killed"
+        },
+        {
+          "id": "cxx_lt_to_le",
+          "location": {
+            "end": {
+              "column": 27,
+              "line": 55
+            },
+            "start": {
+              "column": 18,
+              "line": 55
+            }
+          },
+          "mutatorName": "Replaced < with <=",
+          "replacement": "<=",
+          "status": "Killed"
+        },
+        {
+          "id": "cxx_post_inc_to_post_dec",
+          "location": {
+            "end": {
+              "column": 28,
+              "line": 29
+            },
+            "start": {
+              "column": 25,
+              "line": 29
+            }
+          },
+          "mutatorName": "Replaced x++ with x--",
+          "replacement": "--",
+          "status": "Killed"
+        },
+        {
+          "id": "cxx_post_inc_to_post_dec",
+          "location": {
+            "end": {
+              "column": 32,
+              "line": 33
+            },
+            "start": {
+              "column": 29,
+              "line": 33
+            }
+          },
+          "mutatorName": "Replaced x++ with x--",
+          "replacement": "--",
+          "status": "Killed"
+        },
+        {
+          "id": "cxx_post_inc_to_post_dec",
+          "location": {
+            "end": {
+              "column": 31,
+              "line": 28
+            },
+            "start": {
+              "column": 28,
+              "line": 28
+            }
+          },
+          "mutatorName": "Replaced x++ with x--",
+          "replacement": "--",
+          "status": "Killed"
+        },
+        {
+          "id": "cxx_post_inc_to_post_dec",
+          "location": {
+            "end": {
+              "column": 28,
+              "line": 51
+            },
+            "start": {
+              "column": 25,
+              "line": 51
+            }
+          },
+          "mutatorName": "Replaced x++ with x--",
+          "replacement": "--",
+          "status": "Killed"
+        },
+        {
+          "id": "cxx_post_inc_to_post_dec",
+          "location": {
+            "end": {
+              "column": 32,
+              "line": 55
+            },
+            "start": {
+              "column": 29,
+              "line": 55
+            }
+          },
+          "mutatorName": "Replaced x++ with x--",
+          "replacement": "--",
+          "status": "Killed"
+        },
+        {
+          "id": "cxx_post_inc_to_post_dec",
+          "location": {
+            "end": {
+              "column": 31,
+              "line": 50
+            },
+            "start": {
+              "column": 28,
+              "line": 50
+            }
+          },
+          "mutatorName": "Replaced x++ with x--",
+          "replacement": "--",
+          "status": "Killed"
+        },
+        {
+          "id": "cxx_sub_to_add",
+          "location": {
+            "end": {
+              "column": 27,
+              "line": 33
+            },
+            "start": {
+              "column": 22,
+              "line": 33
+            }
+          },
+          "mutatorName": "Replaced - with +",
+          "replacement": "+",
+          "status": "Killed"
+        },
+        {
+          "id": "cxx_sub_to_add",
+          "location": {
+            "end": {
+              "column": 27,
+              "line": 55
+            },
+            "start": {
+              "column": 22,
+              "line": 55
+            }
+          },
+          "mutatorName": "Replaced - with +",
+          "replacement": "+",
+          "status": "Killed"
+        }
+      ],
+      "source": "#include <bit/int96.h>\n\n#include \"unit.h\"\n\n#define check(expr) if (!(expr)) printf(\"failed at %s:%d\\n\", __FILE__, __LINE__)\n\nstatic void\ntest()\n{\n\theader();\n\n\tconst uint64_t a = 0xFFFFFFFFFFFFFFFFull / 2;\n\tint96_num num, num1, num2;\n\tint96_set_unsigned(&num, 0);\n\tint96_set_unsigned(&num1, a);\n\tint96_set_unsigned(&num2, a);\n\tint96_invert(&num2);\n\tcheck(int96_is_neg_int64(&num2));\n\tcheck(int96_extract_neg_int64(&num2) == int64_t(-a));\n\tcheck(int96_is_uint64(&num));\n\tcheck(int96_extract_uint64(&num) == 0);\n\tint96_add(&num, &num1);\n\tcheck(int96_is_uint64(&num));\n\tcheck(int96_extract_uint64(&num) == a);\n\tint96_add(&num, &num1);\n\tcheck(int96_is_uint64(&num));\n\tcheck(int96_extract_uint64(&num) == a * 2);\n\tfor (int i = 1; i < 1000; i++) {\n\t\tfor(int j = 0; j < i; j++) {\n\t\t\tint96_add(&num, &num1);\n\t\t\tcheck(!int96_is_uint64(&num) && !int96_is_neg_int64(&num));\n\t\t}\n\t\tfor(int j = 0; j < i - 1; j++) {\n\t\t\tint96_add(&num, &num2);\n\t\t\tcheck(!int96_is_uint64(&num) && !int96_is_neg_int64(&num));\n\t\t}\n\t\tint96_add(&num, &num2);\n\t\tcheck(int96_is_uint64(&num));\n\t\tcheck(int96_extract_uint64(&num) == a * 2);\n\t}\n\tint96_add(&num, &num2);\n\tcheck(int96_is_uint64(&num));\n\tcheck(int96_extract_uint64(&num) == a);\n\tint96_add(&num, &num2);\n\tcheck(int96_is_uint64(&num));\n\tcheck(int96_extract_uint64(&num) == 0);\n\tint96_add(&num, &num2);\n\tcheck(int96_is_neg_int64(&num));\n\tcheck(int96_extract_neg_int64(&num) == int64_t(-a));\n\tfor (int i = 1; i < 1000; i++) {\n\t\tfor(int j = 0; j < i; j++) {\n\t\t\tint96_add(&num, &num2);\n\t\t\tcheck(!int96_is_uint64(&num) && !int96_is_neg_int64(&num));\n\t\t}\n\t\tfor(int j = 0; j < i - 1; j++) {\n\t\t\tint96_add(&num, &num1);\n\t\t\tcheck(!int96_is_uint64(&num) && !int96_is_neg_int64(&num));\n\t\t}\n\t\tint96_add(&num, &num1);\n\t\tcheck(int96_is_neg_int64(&num));\n\t\tcheck(int96_extract_neg_int64(&num) == int64_t(-a));\n\t}\n\n\tfooter();\n}\n\nint\nmain(int, const char **)\n{\n\ttest();\n}\n"
+    }
+  },
+  "mutationScore": 82,
+  "thresholds": {
+    "high": 80,
+    "low": 60
+  }
+}

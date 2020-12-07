@@ -7,7 +7,8 @@ from generate import render_template, DEFAULT_TEXT_TEMPLATE
                     ("missing-mutant-location-report.json"),
                     ("missing-replacement-report.json"),
                     ("missing-version-report.json"),
-                    ("strict-report.json")])
+                    ("strict-report.json"),
+                    ("int96.json")])
 def test_render_template(data_filename):
     test_path = os.path.dirname(os.path.abspath(__file__))
     data_path = os.path.join(test_path, "static", data_filename) 
