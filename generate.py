@@ -47,97 +47,205 @@ DEFAULT_HTML_TEMPLATE = """
     <meta http-equiv="X-UA-Compatible" content="IE=9"/>
     <meta name="description" content="Mutation testing results">
     <title>Mutation testing results</title>
+    <style>
+        h1 {text-align: center;}
+		body {
+			background-color: #f3f2f2;
+			font-size: 13pt;
+			font-family: Verdana, Arial, Helvetica, Sans-Serif;
+		}
+		table {
+			font-family: arial, sans-serif;
+			border-collapse: collapse;
+			align: left;
+			width: 30%;
+		}
+		td, th {
+			border: 1px solid #dddddd;
+			text-align: center;
+			vertical-align: middle;
+			padding: 8px;
+		}
+		tr:nth-child(even) {
+			background-color: #dddddd;
+		}
+		.label {
+			font-size: 12pt;
+			padding: 6px;
+			border-radius: 10%;
+			margin-right: 2px;
+		}
+		.footer {
+			position: absolute;
+			left: 50%;
+			margin-left: -100px;
+			text-align: center;
+		}
+        .metric {font-weight: bold;}
+        .status {font-weight: bold;}
+        .status_killed {color: green;}
+        .status_survived {color: red;}
+        .status_no_coverage {color: red;}
+        .status_timeout {color: red;}
+        .status_runtime_error {color: green;}
+        .status_compile_error {color: green;}
+        .status_ignored {color: red;}
+    </style>
 </head>
 
 <body>
+<h1>Mutation testing results</h1>
 <div>
-<div>Mutation states</div>
-<div>
-<div>Killed</div> - {{ killed }}
-When at least one test failed while this mutant was active, the mutant is
-killed.
+<h2>Mutation states</h2>
+
+<table>
+  <tr>
+	<!-- When at least one test failed while this mutant was active, the mutant is killed. -->
+    <td class="status_killed status">Killed</td>
+    <td>{{ killed }}</td>
+  </tr>
+  <tr>
+	<!-- When all tests passed while this mutant was active, the mutant survived. You're
+	missing a test for it. -->
+    <td class="status_survived status">Survived</td>
+    <td>{{ survived }}</td>
+  </tr>
+  <tr>
+	<!-- No tests were executed for this mutant. It probably is located in a part of the
+	code not hit by any of your tests. This means the mutant survived and you are
+	missing a test case for it. -->
+    <td class="status_no_coverage status">No coverage</td>
+    <td>{{ no_coverage }}</td>
+  </tr>
+  <tr>
+	<!-- The running of tests with this mutant active resulted in a timeout. For
+	example, the mutant resulted in an infinite loop in your code. Don't spend too
+	much attention to this mutant. It is counted as "detected". The logic here is
+	that if this mutant were to be injected in your code, your CI build would
+	detect it because the tests will never complete. -->
+    <td class="status_timeout status">Timeout</td>
+    <td>{{ timeout }}</td>
+  </tr>
+  <tr>
+	<!-- The running of the tests resulted in an error (rather than a failed test). This
+	can happen when the testrunner fails. For example, when a testrunner throws an
+	OutOfMemoryError or for dynamic languages where the mutant resulted in
+	unparsable code. Don't spend too much attention looking at this mutant. It is
+	not represented in your mutation score. -->
+    <td class="status_runtime_error status">Runtime error</td>
+    <td>{{ runtime_error }}</td>
+  </tr>
+  <tr>
+	<!-- The mutant resulted in a compiler error. This can happen in compiled languages.
+	Don't spend too much attention looking at this mutant. It is not represented in
+	your mutation score. -->
+    <td class="status_compile_error status">Compile error</td>
+    <td>{{ compile_error }}</td>
+  </tr>
+  <tr>
+	<!-- The mutant was not tested because the config of the user asked for it to be
+	ignored. This will not count against your mutation score but will show up in
+	reports. -->
+    <td class="status_ignored status">Ignored</td>
+    <td>{{ runtime_error }}</td>
+  </tr>
+</table>
 </div>
 
 <div>
-<div>Survived</div> - {{ survived }}
-When all tests passed while this mutant was active, the mutant survived. You're
-missing a test for it.
-</div>
+<h2>Mutation metrics</h2>
 
-<div>
-<div>No coverage</div> - {{ no_coverage }}
-No tests were executed for this mutant. It probably is located in a part of the
-code not hit by any of your tests. This means the mutant survived and you are
-missing a test case for it.
-</div>
+{% set undetected = killed + no_coverage -%}
+{% set detected = killed + no_coverage -%}
+{% set covered = detected + survived -%}
+{% set valid = detected + undetected -%}
+{% set invalid = compile_error + runtime_error -%}
+{% set total = valid + invalid + ignored -%}
+{% set score = detected / valid * 100 -%}
+{% set score_covered = detected / covered * 100 -%}
 
-<div>
-<div>Timeout</div> - {{ timeout }}
-The running of tests with this mutant active resulted in a timeout. For
-example, the mutant resulted in an infinite loop in your code. Don't spend too
-much attention to this mutant. It is counted as "detected". The logic here is
-that if this mutant were to be injected in your code, your CI build would
-detect it because the tests will never complete.
-</div>
+<table>
+<tr>
+<!--  (killed + timeout) -->
+<td class="metric">Detected</td>
+<td>{{undetected}}</td>
+<td>The number of mutants detected by your tests</td>
+</tr>
+<tr>
+<!--  (survived + no coverage) -->
+<td class="metric">Undetected</td>
+<td>{{undetected}}</td>
+<td>The number of mutants that are not detected by your tests.</td>
+</tr>
+<tr>
+<!-- (detected + survived) -->
+<td class="metric">Covered</td>
+<td>{{ covered }}</td>
+<td>The number of mutants that your tests produce code coverage for</td>
+</tr>
+<tr>
+<!--  (detected + undetected) -->
+<td class="metric">Valid</td>
+<td>{{ valid }}</td>
+<td>The number of valid mutants. They didn't result in a compile error or runtime error.</td>
+</tr>
+<tr>
+<!--  (runtime errors + compile errors) -->
+<td class="metric">Invalid</div>
+<td>{{ invalid }}</td>
+<td>The number of invalid mutants. They couldn't be tested because they produce
+either a compile error or a runtime error.</td>
+</tr>
+<tr>
+<!--  (valid + invalid + ignored) -->
+<td class="metric">Total mutants</td>
+<td>{{ total }}</td>
+<td>All mutants.</td>
+</tr>
+<tr>
+<!--  (detected / valid * 100) -->
+<td class="metric">Mutation score</td>
+<td>{{ score }}</td>
+<td>The total percentage of mutants that were killed.</td>
+</tr>
+<tr>
+<!-- (detected / covered * 100) -->
+<td class="metric">Mutation score based on covered code</div>
+<td>{{ score_covered }}</td>
+<td>The total percentage of mutants that were killed based on the code coverage results.</td>
+</tr>
+</table>
 
-<div>
-<div>Runtime error</div> - {{ runtime_error }}
-The running of the tests resulted in an error (rather than a failed test). This
-can happen when the testrunner fails. For example, when a testrunner throws an
-OutOfMemoryError or for dynamic languages where the mutant resulted in
-unparsable code. Don't spend too much attention looking at this mutant. It is
-not represented in your mutation score.
-</div>
-
-<div>
-<div>Compile error</div> - {{ compile_error }}
-The mutant resulted in a compiler error. This can happen in compiled languages.
-Don't spend too much attention looking at this mutant. It is not represented in
-your mutation score.
-</div>
-
-<div>
-<div>Ignored</div> - {{ ignored }}
-The mutant was not tested because the config of the user asked for it to be
-ignored. This will not count against your mutation score but will show up in
-reports.
-</div>
-</div>
-
-<div>
-<div>Mutation metrics</div>
-<ul>
-<li>Detected (killed + timeout) - The number of mutants detected by your tests.
-<li>Undetected (survived + no coverage) - The number of mutants that are not
-detected by your tests.</li>
-<li>Covered (detected + survived) - The number of mutants that your tests
-produce code coverage for.</li>
-<li>Valid (detected + undetected) - The number of valid mutants. They didn't
-result in a compile error or runtime error.</li>
-<li>Invalid (runtime errors + compile errors) - The number of invalid mutants.
-They couldn't be tested because they produce either a compile error or a
-runtime error.</li>
-<li>Total mutants (valid + invalid + ignored) - All mutants.</li>
-<li>Mutation score (detected / valid * 100) - The total percentage of mutants
-that were killed.</li>
-<li>Mutation score based on covered code (detected / covered * 100) - The total
-percentage of mutants that were killed based on the code coverage results.</li>
-</div>
+<h2>Mutants</h2>
 
 {% set files = json_data['files'] %}
+{% set mutant_index = namespace(value=0) %}
 
 {% for filename, properties in files.items() %}
 <p>Filename: {{ filename }}</p>
-<p>Mutants:</p>
+<table>
 {% for mutant in properties['mutants'] %}
-<ul>
-<li>{{mutant['mutatorName']}}, {{mutant['status']}}</li>
-</ul>
+{% set mutant_index.value = mutant_index.value + 1 %}
+<tr>
+<td>
+<a name="#{{ mutant_index.value }}">
+<a href="#{{ mutant_index.value }}">#{{ loop.index }}</a>
+</td>
+{% if mutant['status'] == "Killed" %}
+{% elif mutant['status'] == "Survived" %}
+{% endif %}
+<td>{{mutant['status']}}</td>
+</div>
+<td>{{mutant['mutatorName']}}</td>
+</tr>
 {% endfor %}
+</table>
 {% endfor %}
 
-Schema version: {{ json_data['schemaVersion'] }}
-<p>Time of generation: {{ current_time.strftime('%d-%m-%Y %H:%M') }}</p>
+<div class="footer">Schema version: {{ json_data['schemaVersion'] }}, 
+Time of generation: {{ current_time.strftime('%d-%m-%Y %H:%M') }},
+Generated by <a href="https://github.com/ligurio/py-mutation-testing-elements">py-mutation-testing-elements</a>
+</div>
 </body>
 </html>
 """
