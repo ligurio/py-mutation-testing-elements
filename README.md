@@ -16,4 +16,5 @@ $ ./generate.py --data tests/static/additional-properties-report.json
 ## Features:
 
 - generate self-containing HTML report with anchor web-links
+- generate JUnit report
 - generate patches for each mutant
